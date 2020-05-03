@@ -1,0 +1,72 @@
+version: "3.8"
+
+services:
+
+  rabbitmq:
+    image: library/rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - 127.0.0.1:15673:15672
+    volumes:
+      - camtester-rabbitmq:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  postgres:
+    image: library/postgres:12-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+    volumes:
+      - camtester-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  camtester-pinger:
+    image: camtester-pinger
+    container_name: camtester-pinger
+    build: ./camtester-pinger
+    environment:
+      - CAMTESTER_PINGER_RABBITMQ_URI
+      - CAMTESTER_PINGER_RABBITMQ_EXCHANGE
+      - CAMTESTER_PINGER_CONCURRENCY
+    sysctls:
+      net.ipv4.ping_group_range: "0   2147483647"
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped
+
+  camtester-prober:
+    image: camtester-prober
+    container_name: camtester-prober
+    build: ./camtester-prober
+    environment:
+      - CAMTESTER_PROBER_RABBITMQ_URI
+      - CAMTESTER_PROBER_RABBITMQ_EXCHANGE
+      - CAMTESTER_PROBER_CONCURRENCY
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - rabbitmq
+    restart: unless-stopped
+
+  camtester-core:
+    image: camtester-core
+    container_name: camtester-core
+    build: ./camtester-core
+    environment:
+      - CAMTESTER_CORE_BIND_ADDR
+      - CAMTESTER_CORE_JWT_SECRET
+      - CAMTESTER_CORE_POSTGRES_URI
+      - CAMTESTER_CORE_RABBITMQ_URI
+      - CAMTESTER_CORE_RABBITMQ_EXCHANGE
+      - CAMTESTER_CORE_CONCURRENCY
+    ports:
+      - 127.0.0.1:80:80
+    depends_on:
+      - rabbitmq
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  camtester-rabbitmq:
+  camtester-postgres:

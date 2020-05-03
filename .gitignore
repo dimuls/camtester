@@ -1,0 +1,3 @@
+deployments/.env
+deployments/camtester-core/camtester-core
+deployments/camtester-pinger/camtester-pinger
