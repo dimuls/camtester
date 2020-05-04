@@ -2,12 +2,14 @@ package entity
 
 import (
 	"encoding/json"
+	"errors"
 )
 
 type Task struct {
-	ID      int             `json:"id" db:"id"`
-	Type    string          `json:"type" db:"type"`
-	Payload json.RawMessage `json:"payload" db:"payload"`
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	GeoLocation string          `json:"geo_location"`
+	Payload     json.RawMessage `json:"payload"`
 }
 
 func (t *Task) MarshalPayload(payload interface{}) (err error) {
@@ -21,10 +23,9 @@ func (t Task) UnmarshalPayload(v interface{}) (err error) {
 }
 
 type TaskResult struct {
-	ID      int             `json:"id" db:"id"`
-	TaskID  int             `json:"task_id" db:"task_id"`
-	Ok      bool            `json:"ok" db:"ok"`
-	Payload json.RawMessage `json:"payload" db:"payload"`
+	TaskID  string          `json:"task_id"`
+	Ok      bool            `json:"ok"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 func (t *TaskResult) MarshalPayload(payload interface{}) (err error) {
@@ -36,3 +37,7 @@ func (t TaskResult) UnmarshalPayload(v interface{}) (err error) {
 	err = json.Unmarshal(t.Payload, v)
 	return
 }
+
+var (
+	ErrTaskResultNotFound = errors.New("task result not found")
+)

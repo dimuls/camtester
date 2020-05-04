@@ -2,13 +2,14 @@ package core
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -18,8 +19,7 @@ import (
 )
 
 type DBStorage interface {
-	AddTask(t entity.Task) (id int, err error)
-	TaskResult(taskID int) (tr entity.TaskResult, err error)
+	TaskResult(taskID string) (tr entity.TaskResult, err error)
 	AddTaskResult(tr entity.TaskResult) (err error)
 }
 
@@ -28,7 +28,7 @@ type TaskPublisher interface {
 }
 
 type Core struct {
-	dbStorage     DBStorage
+	dbs           DBStorage
 	taskPublisher TaskPublisher
 	echo          *echo.Echo
 	log           *logrus.Entry
@@ -38,7 +38,7 @@ type Core struct {
 
 func NewCore(dbs DBStorage, tp TaskPublisher, bindAddr, jwtSecret string) *Core {
 	c := &Core{
-		dbStorage:     dbs,
+		dbs:           dbs,
 		taskPublisher: tp,
 		log:           logrus.WithField("subsystem", "core"),
 		stop:          make(chan struct{}),
@@ -50,12 +50,15 @@ func NewCore(dbs DBStorage, tp TaskPublisher, bindAddr, jwtSecret string) *Core 
 	e.HideBanner = true
 	e.HidePort = true
 
+	e.HTTPErrorHandler = c.httpErrorHandler
+
 	e.Use(middleware.Recover())
 	e.Use(logrusLogger)
 	e.Use(middleware.JWT([]byte(jwtSecret)))
 
-	e.POST("/task", c.postTask)
-	e.GET("/task/:task-id/result", c.getTaskResult)
+	e.POST("/tasks", c.postTasks)
+	e.POST("/tasks-batch", c.postTasksBatch)
+	e.GET("/tasks/:task-id/result", c.getTaskResult)
 
 	c.wg.Add(1)
 	go func() {
@@ -99,10 +102,18 @@ func (cr *Core) Stop() (err error) {
 }
 
 func (cr *Core) HandleTaskResult(tr entity.TaskResult) (err error) {
-	err = cr.dbStorage.AddTaskResult(tr)
+	log := cr.log.WithField("task_id", tr.TaskID)
+
+	log.Debug("task result received")
+
+	err = cr.dbs.AddTaskResult(tr)
 	if err != nil {
-		cr.log.WithError(err).Error("failed to add task result to DB storage")
+		log.WithError(err).Error("failed to add task result to DB storage")
+		return err
 	}
+
+	log.Debug("task result successfully handled")
+
 	return
 }
 
@@ -137,7 +148,7 @@ func (cr *Core) httpErrorHandler(err error, ctx echo.Context) {
 	}
 }
 
-func (cr *Core) postTask(c echo.Context) error {
+func (cr *Core) postTasks(c echo.Context) error {
 	var t entity.Task
 
 	err := c.Bind(&t)
@@ -146,37 +157,65 @@ func (cr *Core) postTask(c echo.Context) error {
 			fmt.Errorf("bind task: %w", err))
 	}
 
-	id, err := cr.dbStorage.AddTask(t)
-	if err != nil {
-		return fmt.Errorf("add task to DB storage: %w", err)
+	if t.Type == "" {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			"type is empty")
 	}
 
-	t.ID = id
+	if t.GeoLocation == "" {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			"geo_location is empty")
+	}
+
+	if t.Payload == nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			"payload is empty")
+	}
+
+	t.ID = uuid.New().String()
 
 	err = cr.taskPublisher.PublishTask(t)
 	if err != nil {
 		return fmt.Errorf("publish task: %w", err)
 	}
 
-	return c.JSON(http.StatusOK, id)
+	return c.JSON(http.StatusOK, t.ID)
+}
+
+func (cr *Core) postTasksBatch(c echo.Context) error {
+	var ts []entity.Task
+
+	err := c.Bind(&ts)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Errorf("bind task: %w", err))
+	}
+
+	var ids []string
+
+	for _, t := range ts {
+		t.ID = uuid.New().String()
+
+		err = cr.taskPublisher.PublishTask(t)
+		if err != nil {
+			return fmt.Errorf("publish task: %w", err)
+		}
+
+		ids = append(ids, t.ID)
+	}
+
+	return c.JSON(http.StatusOK, ids)
 }
 
 func (cr *Core) getTaskResult(c echo.Context) error {
-	taskID, err := strconv.Atoi(c.Param("task-id"))
+	tr, err := cr.dbs.TaskResult(c.Param("task-id"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			fmt.Errorf("parse task-id: %w", err))
-	}
-
-	tr, err := cr.dbStorage.TaskResult(taskID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, entity.ErrTaskResultNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound,
 				"task result not found")
 		}
 		return fmt.Errorf("get task result from DB storage: %w", err)
 	}
-
 	return c.JSON(http.StatusOK, tr)
 }
 

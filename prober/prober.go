@@ -1,6 +1,8 @@
 package prober
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -30,20 +32,27 @@ type ProbeResult struct {
 	SilenceFrames         int `json:"silence_frames"`
 }
 
+type RestreamerProvider interface {
+	ProvideRestreamer(uri string) (string, error)
+}
+
 type TaskResultPublisher interface {
 	PublishTaskResult(entity.TaskResult) error
 }
 
 type Prober struct {
 	ffmpegPath, ffprobePath string
+	restreamerProvider      RestreamerProvider
 	taskResultPublisher     TaskResultPublisher
 	log                     *logrus.Entry
 }
 
-func NewProber(trp TaskResultPublisher, ffmpegPath, ffprobePath string) *Prober {
+func NewProber(rp RestreamerProvider, trp TaskResultPublisher,
+	ffmpegPath, ffprobePath string) *Prober {
 	return &Prober{
 		ffmpegPath:          ffmpegPath,
 		ffprobePath:         ffprobePath,
+		restreamerProvider:  rp,
 		taskResultPublisher: trp,
 		log:                 logrus.WithField("subsystem", "prober"),
 	}
@@ -51,6 +60,8 @@ func NewProber(trp TaskResultPublisher, ffmpegPath, ffprobePath string) *Prober 
 
 func (p *Prober) HandleTask(t entity.Task) error {
 	log := p.log.WithField("task_id", t.ID)
+
+	log.Debug("task recieved")
 
 	var uri string
 
@@ -64,6 +75,21 @@ func (p *Prober) HandleTask(t entity.Task) error {
 		return p.handleError(tr, errMsg, err)
 	}
 
+	restreamerAddr, err := p.restreamerProvider.ProvideRestreamer(uri)
+	if err != nil {
+		errMsg := "failed to get restreamer host"
+		log.WithError(err).Error(errMsg)
+		return p.handleError(tr, errMsg, err)
+	}
+
+	log = log.WithField("restreamer_host", restreamerAddr)
+
+	log.Debug("got restreamer host")
+
+	origURIBase64 := base64.StdEncoding.EncodeToString([]byte(uri))
+
+	uri = fmt.Sprintf("rtsp://%s/%s", restreamerAddr, origURIBase64)
+
 	tempDir := os.TempDir()
 	tempFile := path.Join(tempDir, fmt.Sprintf("probe-%d.%s", t.ID,
 		sampleContainerExt))
@@ -71,12 +97,12 @@ func (p *Prober) HandleTask(t entity.Task) error {
 	recordingErrors, err := ffmpeg.RecordStream(p.ffmpegPath, uri, sampleDurationSec,
 		tempFile)
 
-	//defer func() {
-	//	err = os.Remove(tempFile)
-	//	if err != nil && !errors.Is(err, os.ErrNotExist) {
-	//		log.WithError(err).Error("failed to remove sample file")
-	//	}
-	//}()
+	defer func() {
+		err = os.Remove(tempFile)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.WithError(err).Error("failed to remove sample file")
+		}
+	}()
 
 	if err != nil {
 		errMsg := "failed to record"
@@ -201,6 +227,8 @@ func (p *Prober) HandleTask(t entity.Task) error {
 		log.WithError(err).Error("failed to publish task result")
 		return fmt.Errorf("publish task result: %w", err)
 	}
+
+	log.Debug("task successfully handled")
 
 	return nil
 }

@@ -4,24 +4,21 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/dimuls/camtester/core"
-	"github.com/dimuls/camtester/core/postgres"
-	"github.com/dimuls/camtester/core/rabbitmq"
+	"github.com/dimuls/camtester/core/nats"
+	"github.com/dimuls/camtester/core/redis"
 )
-
-const envPrefix = "CAMTESTER_CORE"
 
 func envConfigParam(key, defaultVal string) string {
 	if key == "" {
 		logrus.Fatal("environment config param with empty key requested")
 	}
-
-	key = envPrefix + "_" + key
 
 	v := os.Getenv(key)
 	if v == "" {
@@ -41,10 +38,13 @@ func main() {
 
 	bindAddr := envConfigParam("BIND_ADDR", ":80")
 	jwtSecret := envConfigParam("JWT_SECRET", "")
-	postgresURI := envConfigParam("POSTGRES_URI", "")
-	rabbitMQURI := envConfigParam("RABBITMQ_URI", "")
-	rabbitMQExchange := envConfigParam("RABBITMQ_EXCHANGE", "")
+	redisClusterAddrsStr := envConfigParam("REDIS_CLUSTER_ADDRS", "")
+	natsURL := envConfigParam("NATS_URL", "")
+	natsClusterID := envConfigParam("NATS_CLUSTER_ID", "camtester")
+	natsClientID := envConfigParam("NATS_CLIENT_ID", "")
 	concurrencyStr := envConfigParam("CONCURRENCY", "100")
+
+	redisClusterAddrs := strings.Split(redisClusterAddrsStr, ",")
 
 	concurrency, err := strconv.Atoi(concurrencyStr)
 	if err != nil {
@@ -53,32 +53,68 @@ func main() {
 
 	logrus.Info("environment config params loaded")
 
-	dbs, err := postgres.NewStorage(postgresURI)
+	dbs, err := redis.NewStorage(redisClusterAddrs)
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to create postgres DB storage")
+		logrus.WithError(err).Fatal("failed to create redis DB storage")
 	}
+	defer func() {
+		err = dbs.Close()
+		if err != nil {
+			logrus.WithError(err).Error(
+				"failed to close redis DB storage")
+		} else {
+			logrus.Info("redis DB storage closed")
+		}
+	}()
 
-	logrus.Info("postgres DB storage created")
+	logrus.Info("redis DB storage created")
 
-	err = dbs.Migrate()
+	tp, err := nats.NewTaskPublisher(natsURL, natsClusterID, natsClientID)
 	if err != nil {
-		logrus.WithError(err).Fatal("failed to migrate postgres DB storage")
+		logrus.WithError(err).Fatal(
+			"failed to create nats task publisher")
 	}
+	defer func() {
+		err = tp.Close()
+		if err != nil {
+			logrus.WithError(err).Error(
+				"failed to close nats task publisher")
+		} else {
+			logrus.Info("nats task publisher closed")
+		}
+	}()
 
-	logrus.Info("postgres DB storage migrated")
-
-	tp := rabbitmq.NewTaskPublisher(rabbitMQURI, rabbitMQExchange)
-
-	logrus.Info("rabbitmq task publisher created and started")
+	logrus.Info("nats task publisher created")
 
 	c := core.NewCore(dbs, tp, bindAddr, jwtSecret)
+	defer func() {
+		err = c.Stop()
+		if err != nil {
+			logrus.WithError(err).Error("failed to stop core")
+		} else {
+			logrus.Info("core stopped")
+		}
+	}()
 
 	logrus.Info("core created and started")
 
-	trc := rabbitmq.NewTaskResultConsumer(rabbitMQURI, rabbitMQExchange,
+	trc, err := nats.NewTaskResultConsumer(natsURL, natsClusterID, natsClientID,
 		concurrency, c)
+	if err != nil {
+		logrus.WithError(err).Fatal(
+			"failed to create nats task result consumer")
+	}
+	defer func() {
+		err = trc.Close()
+		if err != nil {
+			logrus.WithError(err).Error(
+				"failed to close nats task result consumer")
+		} else {
+			logrus.Info("nats task result consumer closed")
+		}
+	}()
 
-	logrus.Info("task result consumer created and started")
+	logrus.Info("task result consumer created")
 
 	// wait for all goroutines to start
 	time.Sleep(200 * time.Millisecond)
@@ -92,27 +128,7 @@ func main() {
 
 	st := time.Now()
 
-	trc.Stop()
-
-	logrus.Info("task result consumer stopped")
-
-	err = c.Stop()
-	if err != nil {
-		logrus.WithError(err).Error("core stop error")
-	}
-
-	logrus.Info("core stopped")
-
-	tp.Stop()
-
-	logrus.Info("task publisher stopped")
-
-	err = dbs.Close()
-	if err != nil {
-		logrus.WithError(err).Error("postgres DB storage close error")
-	}
-
-	logrus.Info("postgres DB storage closed")
-
-	logrus.Infof("stopped in %s seconds, exiting", time.Now().Sub(st))
+	defer func() {
+		logrus.Infof("stopped in %s seconds, exiting", time.Now().Sub(st))
+	}()
 }

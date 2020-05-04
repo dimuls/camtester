@@ -1,3 +1,7 @@
-deployments/.env
 deployments/camtester-core/camtester-core
 deployments/camtester-pinger/camtester-pinger
+deployments/camtester-prober/camtester-prober
+deployments/restreamer-provider/restreamer-provider
+deployments/restreamer-provider/restreamer-provider
+
+

@@ -2,23 +2,20 @@ version: "3.8"
 
 services:
 
-  rabbitmq:
-    image: library/rabbitmq:3-management-alpine
-    container_name: rabbitmq
+  camtester-nats:
+    image: library/nats-streaming:latest
+    container_name: camtester-nats
+    command: ["--cluster_id", "camtester"]
     ports:
-      - 127.0.0.1:15673:15672
-    volumes:
-      - camtester-rabbitmq:/var/lib/rabbitmq
+      - 127.0.0.1:8222:8222
     restart: unless-stopped
 
-  postgres:
-    image: library/postgres:12-alpine
-    container_name: postgres
+  camtester-redis-cluster:
+    image: grokzen/redis-cluster:latest
+    container_name: camtester-redis-cluster
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-    volumes:
-      - camtester-postgres:/var/lib/postgresql/data
+      STANDALONE: "false"
+      SENTINEL: "false"
     restart: unless-stopped
 
   camtester-pinger:
@@ -26,13 +23,34 @@ services:
     container_name: camtester-pinger
     build: ./camtester-pinger
     environment:
-      - CAMTESTER_PINGER_RABBITMQ_URI
-      - CAMTESTER_PINGER_RABBITMQ_EXCHANGE
-      - CAMTESTER_PINGER_CONCURRENCY
+      NATS_URL: "nats://camtester-nats:4222"
+      NATS_CLUSTER_ID: "camtester"
+      NATS_CLIENT_ID: "camtester-pinger"
+      GEO_LOCATION: "moscow"
+      CONCURRENCY: "100"
     sysctls:
       net.ipv4.ping_group_range: "0   2147483647"
     depends_on:
-      - rabbitmq
+      - camtester-nats
+    stop_grace_period: 11s
+    restart: unless-stopped
+
+  restreamer:
+    image: restreamer
+    container_name: restreamer
+    build: ./restreamer
+    restart: unless-stopped
+
+  restreamer-provider:
+    image: restreamer-provider
+    container_name: restreamer-provider
+    build: ./restreamer-provider
+    environment:
+      STORAGE_FILE: "/var/lib/restreamer-provider/storage.json"
+    volumes:
+      - "restreamer-provider:/var/lib/restreamer-provider"
+    ports:
+      - 127.0.0.1:3000:80
     restart: unless-stopped
 
   camtester-prober:
@@ -40,13 +58,15 @@ services:
     container_name: camtester-prober
     build: ./camtester-prober
     environment:
-      - CAMTESTER_PROBER_RABBITMQ_URI
-      - CAMTESTER_PROBER_RABBITMQ_EXCHANGE
-      - CAMTESTER_PROBER_CONCURRENCY
-    cap_add:
-      - NET_ADMIN
+      NATS_URL: "nats://camtester-nats:4222"
+      NATS_CLUSTER_ID: "camtester"
+      NATS_CLIENT_ID: "camtester-prober"
+      RESTREAMER_PROVIDER_URI: "http://restreamer-provider"
+      GEO_LOCATION: "moscow"
+      CONCURRENCY: "100"
     depends_on:
-      - rabbitmq
+      - camtester-nats
+      - restreamer-provider
     restart: unless-stopped
 
   camtester-core:
@@ -54,19 +74,18 @@ services:
     container_name: camtester-core
     build: ./camtester-core
     environment:
-      - CAMTESTER_CORE_BIND_ADDR
-      - CAMTESTER_CORE_JWT_SECRET
-      - CAMTESTER_CORE_POSTGRES_URI
-      - CAMTESTER_CORE_RABBITMQ_URI
-      - CAMTESTER_CORE_RABBITMQ_EXCHANGE
-      - CAMTESTER_CORE_CONCURRENCY
+      JWT_SECRET: "secret"
+      REDIS_CLUSTER_ADDRS: "camtester-redis-cluster:7000,camtester-redis-cluster:7001,camtester-redis-cluster:7002"
+      NATS_URL: "nats://camtester-nats:4222"
+      NATS_CLUSTER_ID: "camtester"
+      NATS_CLIENT_ID: "camtester-core"
+      CONCURRENCY: "100"
     ports:
       - 127.0.0.1:80:80
     depends_on:
-      - rabbitmq
-      - postgres
+      - camtester-redis-cluster
+      - camtester-nats
     restart: unless-stopped
 
 volumes:
-  camtester-rabbitmq:
-  camtester-postgres:
+  restreamer-provider:

@@ -39,6 +39,8 @@ func NewPinger(trp TaskResultPublisher) *Pinger {
 func (p *Pinger) HandleTask(t entity.Task) error {
 	log := p.log.WithField("task_id", t.ID)
 
+	log.Debug("task recieved")
+
 	var host string
 
 	tr := entity.TaskResult{TaskID: t.ID}
@@ -86,6 +88,8 @@ func (p *Pinger) HandleTask(t entity.Task) error {
 		log.WithError(err).Error("failed to publish task result")
 		return fmt.Errorf("publish task result: %w", err)
 	}
+
+	log.Debug("task successfully handled")
 
 	return nil
 }
