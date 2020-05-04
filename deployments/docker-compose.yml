@@ -53,6 +53,22 @@ services:
       - 127.0.0.1:3000:80
     restart: unless-stopped
 
+  camtester-checker:
+    image: camtester-checker
+    container_name: camtester-checker
+    build: ./camtester-checker
+    environment:
+      NATS_URL: "nats://camtester-nats:4222"
+      NATS_CLUSTER_ID: "camtester"
+      NATS_CLIENT_ID: "camtester-checker"
+      RESTREAMER_PROVIDER_URI: "http://restreamer-provider"
+      GEO_LOCATION: "moscow"
+      CONCURRENCY: "100"
+    depends_on:
+      - camtester-nats
+      - restreamer-provider
+    restart: unless-stopped
+
   camtester-prober:
     image: camtester-prober
     container_name: camtester-prober

@@ -11,8 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/dimuls/camtester/core"
-	"github.com/dimuls/camtester/core/nats"
-	"github.com/dimuls/camtester/core/redis"
+	"github.com/dimuls/camtester/nats"
+	"github.com/dimuls/camtester/redis"
 )
 
 func envConfigParam(key, defaultVal string) string {

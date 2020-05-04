@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dimuls/camtester/core/entity"
 	"github.com/nats-io/stan.go"
+
+	"github.com/dimuls/camtester/entity"
 )
 
 type TaskPublisher struct {

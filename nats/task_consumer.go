@@ -5,36 +5,35 @@ import (
 	"fmt"
 	"sync"
 
+	stan "github.com/nats-io/stan.go"
 	"github.com/sirupsen/logrus"
 
-	"github.com/dimuls/camtester/core/entity"
-
-	stan "github.com/nats-io/stan.go"
+	"github.com/dimuls/camtester/entity"
 )
 
-type TaskResultHandler interface {
-	HandleTaskResult(t entity.TaskResult) error
+type TaskHandler interface {
+	HandleTask(t entity.Task) error
 }
 
-type TaskResultConsumer struct {
-	taskHandler TaskResultHandler
+type TaskConsumer struct {
+	taskHandler TaskHandler
 	conn        stan.Conn
 	sub         stan.Subscription
 	log         *logrus.Entry
 	wg          sync.WaitGroup
 }
 
-func NewTaskResultConsumer(natsURL, clusterID, clientID string, concurrency int,
-	th TaskResultHandler) (tc *TaskResultConsumer, err error) {
+func NewTaskConsumer(natsURL, clusterID, clientID, geoLocation,
+	tasksType string, concurrency int, th TaskHandler) (tc *TaskConsumer, err error) {
 
-	tc = &TaskResultConsumer{
+	tc = &TaskConsumer{
 		taskHandler: th,
 		log:         logrus.WithField("subsystem", "nats_task_consumer"),
 	}
 
 	var conn stan.Conn
 
-	conn, err = stan.Connect(clusterID, clientID+"-task-result-consumer",
+	conn, err = stan.Connect(clusterID, clientID+"-task-consumer",
 		stan.NatsURL(natsURL))
 	if err != nil {
 		err = fmt.Errorf("nats connect: %w", err)
@@ -51,8 +50,9 @@ func NewTaskResultConsumer(natsURL, clusterID, clientID string, concurrency int,
 
 	tc.conn = conn
 
-	tc.sub, err = tc.conn.Subscribe(
-		taskResultsSubject,
+	tc.sub, err = tc.conn.QueueSubscribe(
+		tasksSubject(geoLocation, tasksType),
+		tasksQueueGroup(geoLocation, tasksType),
 		tc.handleMsg,
 		stan.SetManualAckMode(),
 		stan.MaxInflight(concurrency))
@@ -64,19 +64,19 @@ func NewTaskResultConsumer(natsURL, clusterID, clientID string, concurrency int,
 	return
 }
 
-func (tc *TaskResultConsumer) handleMsg(msg *stan.Msg) {
+func (tc *TaskConsumer) handleMsg(msg *stan.Msg) {
 	tc.wg.Add(1)
 	go func() {
 		defer tc.wg.Done()
 
-		var t entity.TaskResult
+		var t entity.Task
 
 		err := json.Unmarshal(msg.Data, &t)
 		if err != nil {
 			logrus.WithError(err).Error(
-				"failed to JSON unmarshal task result: %w", err)
+				"failed to JSON unmarshal task: %w", err)
 		} else {
-			err = tc.taskHandler.HandleTaskResult(t)
+			err = tc.taskHandler.HandleTask(t)
 			if err != nil {
 				return
 			}
@@ -89,7 +89,7 @@ func (tc *TaskResultConsumer) handleMsg(msg *stan.Msg) {
 	}()
 }
 
-func (tc *TaskResultConsumer) Close() error {
+func (tc *TaskConsumer) Close() error {
 	err := tc.sub.Unsubscribe()
 	if err != nil {
 		return fmt.Errorf("unsubscribe: %w", err)

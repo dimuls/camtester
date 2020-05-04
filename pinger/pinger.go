@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dimuls/camtester/core/entity"
 	"github.com/sirupsen/logrus"
 	"github.com/sparrc/go-ping"
+
+	"github.com/dimuls/camtester/entity"
 )
 
 const TaskType = "ping"
@@ -39,7 +40,7 @@ func NewPinger(trp TaskResultPublisher) *Pinger {
 func (p *Pinger) HandleTask(t entity.Task) error {
 	log := p.log.WithField("task_id", t.ID)
 
-	log.Debug("task recieved")
+	log.Debug("task received")
 
 	var host string
 
@@ -82,6 +83,7 @@ func (p *Pinger) HandleTask(t entity.Task) error {
 	}
 
 	tr.Ok = true
+	tr.Time = time.Now()
 
 	err = p.taskResultPublisher.PublishTaskResult(tr)
 	if err != nil {
@@ -95,6 +97,8 @@ func (p *Pinger) HandleTask(t entity.Task) error {
 }
 func (p *Pinger) handleError(tr entity.TaskResult,
 	errMsg string, err error) error {
+
+	tr.Time = time.Now()
 
 	err = tr.MarshalPayload(errMsg + ": " + err.Error())
 	if err != nil {

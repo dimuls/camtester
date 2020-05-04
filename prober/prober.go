@@ -7,13 +7,13 @@ import (
 	"math"
 	"os"
 	"path"
+	"time"
 
 	"github.com/gonum/stat"
 	"github.com/sirupsen/logrus"
 
-	"github.com/dimuls/camtester/core/entity"
-
-	"github.com/dimuls/camtester/prober/ffmpeg"
+	"github.com/dimuls/camtester/entity"
+	"github.com/dimuls/camtester/ffmpeg"
 )
 
 const TaskType = "probe"
@@ -61,7 +61,7 @@ func NewProber(rp RestreamerProvider, trp TaskResultPublisher,
 func (p *Prober) HandleTask(t entity.Task) error {
 	log := p.log.WithField("task_id", t.ID)
 
-	log.Debug("task recieved")
+	log.Debug("task received")
 
 	var uri string
 
@@ -215,6 +215,7 @@ func (p *Prober) HandleTask(t entity.Task) error {
 	}
 
 	tr.Ok = true
+	tr.Time = time.Now()
 
 	err = tr.MarshalPayload(pr)
 	if err != nil {
@@ -235,6 +236,8 @@ func (p *Prober) HandleTask(t entity.Task) error {
 
 func (p *Prober) handleError(tr entity.TaskResult,
 	errMsg string, err error) error {
+
+	tr.Time = time.Now()
 
 	err = tr.MarshalPayload(errMsg + ": " + err.Error())
 	if err != nil {

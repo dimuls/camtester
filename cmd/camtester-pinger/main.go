@@ -9,7 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/dimuls/camtester/core/nats"
+	"github.com/dimuls/camtester/nats"
 	"github.com/dimuls/camtester/pinger"
 )
 

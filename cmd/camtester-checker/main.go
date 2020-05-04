@@ -9,9 +9,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/dimuls/camtester/checker"
 	"github.com/dimuls/camtester/http"
 	"github.com/dimuls/camtester/nats"
-	"github.com/dimuls/camtester/prober"
 )
 
 func envConfigParam(key, defaultVal string) string {
@@ -36,7 +36,6 @@ func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 
 	ffmpegPath := envConfigParam("FFMPEG_PATH", "/usr/bin/ffmpeg")
-	ffprobePath := envConfigParam("FFPROBE_PATH", "/usr/bin/ffprobe")
 	natsURL := envConfigParam("NATS_URL", "")
 	natsClusterID := envConfigParam("NATS_CLUSTER_ID", "camtester")
 	natsClientID := envConfigParam("NATS_CLIENT_ID", "")
@@ -68,13 +67,13 @@ func main() {
 
 	logrus.Info("task result publisher created")
 
-	p := prober.NewProber(http.NewRestreamerProvider(restreamerProviderURI),
-		trp, ffmpegPath, ffprobePath)
+	p := checker.NewChecker(http.NewRestreamerProvider(restreamerProviderURI),
+		trp, ffmpegPath)
 
-	logrus.Info("prober created")
+	logrus.Info("checker created")
 
 	tc, err := nats.NewTaskConsumer(natsURL, natsClusterID, natsClientID,
-		geoLocation, prober.TaskType, concurrency, p)
+		geoLocation, checker.TaskType, concurrency, p)
 	if err != nil {
 		logrus.WithError(err).Fatal("failed create new task consumer")
 	}
@@ -90,7 +89,7 @@ func main() {
 
 	logrus.Info("task consumer created and started")
 
-	logrus.Info("camtester-prober started")
+	logrus.Info("camtester-checker started")
 
 	signals := make(chan os.Signal)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
