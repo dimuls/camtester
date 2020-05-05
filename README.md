@@ -1,6 +1,8 @@
+# camtester
+
 ![Архитекутра](https://github.com/dimuls/camtester/blob/master/architecture.png)
 
-# camtester
+[![Видео с демонстрацией](http://img.youtube.com/vi/Q-DPOM4uRuA/0.jpg)](http://www.youtube.com/watch?v=Q-DPOM4uRuA)
 
 Распределённый масштабируемый сервис детекций отклонений в видеоданных.
 
