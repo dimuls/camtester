@@ -2,9 +2,9 @@
 
 ![Архитекутра](https://github.com/dimuls/camtester/blob/master/architecture.png)
 
-[![Видео с демонстрацией](http://img.youtube.com/vi/Q-DPOM4uRuA/0.jpg)](http://www.youtube.com/watch?v=Q-DPOM4uRuA)
-
 Распределённый масштабируемый сервис детекций отклонений в видеоданных.
+
+[Видео с демонстрацией на youtube](http://www.youtube.com/watch?v=Q-DPOM4uRuA).
 
 Данный репозиторий включает все компоненты системы кроме `restreamer`, который
 находится в [отдельном репозитории](https://github.com/dimuls/rtsp-simple-proxy).
