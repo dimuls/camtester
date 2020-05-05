@@ -43,4 +43,4 @@
 Пакет ядра модуля пробинга видеопотока путём парсинга вывода `ffprobe`.
 
 ## [redis](https://github.com/dimuls/camtester/tree/master/redis)
-Пакет для работы с redis. Содержит реализацию интерфейса `core.DBStore`.
+Пакет для работы с redis. Содержит реализацию интерфейса `core.DBStorage`.
