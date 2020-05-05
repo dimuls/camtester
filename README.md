@@ -4,7 +4,9 @@
 
 Распределённый масштабируемый сервис детекций отклонений в видеоданных.
 
-[Видео с демонстрацией на youtube](http://www.youtube.com/watch?v=Q-DPOM4uRuA).
+[Видео с демонстрацией](http://www.youtube.com/watch?v=Q-DPOM4uRuA).
+
+[Презентация системы](https://github.com/dimuls/camtester/blob/master/presentation.pdf).
 
 Данный репозиторий включает все компоненты системы кроме `restreamer`, который
 находится в [отдельном репозитории](https://github.com/dimuls/rtsp-simple-proxy).
