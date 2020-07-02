@@ -36,6 +36,14 @@ func envConfigParam(key, defaultVal string) string {
 func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 
+	var st time.Time
+	defer func() {
+		if !st.IsZero() {
+			logrus.Infof("stopped in %s seconds, exiting",
+				time.Now().Sub(st))
+		}
+	}()
+
 	bindAddr := envConfigParam("BIND_ADDR", ":80")
 	jwtSecret := envConfigParam("JWT_SECRET", "")
 	redisClusterAddrsStr := envConfigParam("REDIS_CLUSTER_ADDRS", "")
@@ -126,9 +134,5 @@ func main() {
 
 	logrus.Infof("captured %v signal, stopping", <-signals)
 
-	st := time.Now()
-
-	defer func() {
-		logrus.Infof("stopped in %s seconds, exiting", time.Now().Sub(st))
-	}()
+	st = time.Now()
 }

@@ -34,6 +34,14 @@ func envConfigParam(key, defaultVal string) string {
 func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 
+	var st time.Time
+	defer func() {
+		if !st.IsZero() {
+			logrus.Infof("stopped in %s seconds, exiting",
+				time.Now().Sub(st))
+		}
+	}()
+
 	natsURL := envConfigParam("NATS_URL", "")
 	natsClusterID := envConfigParam("NATS_CLUSTER_ID", "camtester")
 	natsClientID := envConfigParam("NATS_CLIENT_ID", "")
@@ -92,9 +100,5 @@ func main() {
 
 	logrus.Infof("captured %v signal, stopping", <-signals)
 
-	st := time.Now()
-
-	defer func() {
-		logrus.Infof("stopped in %s seconds, exiting", time.Now().Sub(st))
-	}()
+	st = time.Now()
 }
